@@ -1,0 +1,73 @@
+# vi:filetype=gitconfig
+
+[alias]
+    lob = log --graph --decorate --pretty=oneline --abbrev-commit
+    lol = lob --all
+    loal = lol --pretty=aol
+    lob2 = "!f() { : git log; git lob \"$(git bb)..$(git c-b)\" \"$@\"; }; f"
+    bb = "!f() { git merge-base \"$(git c-b)\" \"$(git m-b)\"; }; f" # print hash of base changeset for branch
+    c-b = "!f() { git status --porcelain=2 --branch |grep '^. branch\\.head' |awk '{print $NF}' |sed -e 's#^(detached)$#HEAD#'; }; f" # current branch name, or HEAD if detached
+    c-u = "!f() { git status --porcelain=2 --branch |grep '^. branch\\.upstream' |awk '{print $NF}'; }; f" # upstream of current branch, empty string if not set
+    m-b = "!f() { if git x-upstream-exists; then git m-u |sed -e 's#origin/##'; else git config get init.defaultBranch; fi; }; f" # "main" branch name, derived from "main" upstream, or init.defaultBranch if no upstream exists
+    x-upstream-exists="!f() { git remote |grep -qx origin; }; f"
+    m-b-set = "!f() { BB=\"$(git config get init.defaultBranch)\"; printf \"SET MAIN BRANCH ($BB): \" >&2; read UBB </dev/tty; [ \"$UBB\" -a \"$BB\" != \"$UBB\" ] || return; BB=\"${UBB:-\"$BB\"}\"; git config set init.defaultBranch \"$BB\"; }; f"
+    m-u = "!f() { git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || { git m-u-set && git symbolic-ref --short refs/remotes/origin/HEAD; }; }; f" # upstream of "main" branch, from origin/HEAD
+    m-u-set = "!f() { BB=\"$(git ls-remote --symref origin HEAD |grep '^ref: ' |awk '{print $2}' |grep -o '[^/]*$')\"; printf \"SET MAIN BRANCH ($BB): \" >&2; read UBB </dev/tty; BB=\"${UBB:-\"$BB\"}\"; git fetch -q origin \"$BB\" && git remote set-head origin \"$BB\"; }; f" # set the origin/HEAD reference; interactive
+    push-default = "! f() { git config get --default=origin remote.pushdefault; }; f"
+    last = log -1 HEAD
+    sw = checkout
+    pick = cherry-pick
+    ff = merge --ff-only
+    ss = status
+    sss = status -s
+    stun = status -uno
+    dns = diff --name-status
+    dno = diff --name-only
+    rr = "!f() { : git branch ; git rebase \"${1:-\"$(git m-b)\"}\"; }; f"
+    ri = rebase -i
+    rib = "!f() { : git branch ; git ri \"$(git bb)\" \"$@\"; }; f"
+    ws = "!f() { : git branch ; git rebase --whitespace=fix \"${1:-\"$(git m-b)\"}\"; }; f"
+    children = "!f() { : git diff; git branch --contains \"$1\" --format='%(refname:short)' |git rev-list --not \"$1\"^@ --children --stdin |grep -F \"$(git rev-parse \"$1\")\"; }; f"
+    is-ancestor = "!f() { : git diff ; BASE=\"${1:-\"$(git m-b)\"}\"; git branch |cut -c 3- |grep -xv \"$BASE\" |while read BB; do git x-is-ancestor-of \"$BASE\" \"$BB\"; done; }; f"
+    x-is-ancestor-of = "!f() { : git diff; BASE=\"$1\"; BR=\"$2\"; printf \"%-8s  %s  <-  %s\\n\" \"$(git merge-base --is-ancestor \"$BR\" \"$BASE\" || printf \"UN\")MERGED\" \"$BASE\" \"$BR\"; }; f"
+    lop="! f() { git is-ancestor |grep ^MERGED |awk '{ print $NF }' |( while read BB; do git branch -D \"$BB\" && git push -q \"$(git push-default)\" \":$BB\" 2>/dev/null; done; ); }; f"
+    sync = "!f() { : git branch ; BR=\"$(git m-b)\"; if [ \"$(git c-u)\" = \"$(git m-u)\" ]; then git pull; else git fetch origin \"$BR$(git branch --list \"$BR\" |sed -e\"s#^..#:#\")\"; fi; }; f" # sync changes on the main branch (m-b) from 'origin'
+
+    push-target = "!f() { : git branch ; bb=\"${1:-\"$(git rev-parse --abbrev-ref @)\"}\"; rr=\"$(git config \"branch.$bb.pushremote\")\"; rr=\"${rr:-\"$(git config remote.pushdefault)\"}\"; rr=\"${rr:-\"$(git config \"branch.$bb.remote\")\"}\"; echo \"${rr:-origin}\"; }; f" # find the remote name where the branch will be (or have been) pushed
+    nuke = "!f() { printf \"Waa Hoo!! ... \" && git stash -uq && git stash drop -q && echo \"BOOM!\";  }; f" # wipe out ALL non-committed changes in workspace - USE WITH CARE!
+    alias = "!f() { git config -l |grep '^alias' |sort |cut -d = -f 1 |cut -c 7- |( while read aa; do echo \"git config --global --add alias.$aa '$(git help \"$aa\" |sed -E 's#^([^ ]* ){4}.##;s#.$##;s#('\"'\"')#\\\\\\1#g')'\"; done; ); }; f"
+    root = rev-parse --show-toplevel # print repository's root directory
+    dr="!f() { : git fetch ; git root >/dev/null 2>&1 || { echo \"Aborting - not in a git repository\" >&2; return 1; }; RR=\"${1:-origin}\"; XX=\"$(git branch |awk '{print \"'$RR'/\" $NF}' |paste -sd '|' -)\"; git branch -r --list \"$RR/*\" |awk '{print $NF}' |sort -u |grep -Exv \"$XX\" |tr '\\n' '\\0' |xargs -r0 git branch -dr; }; f" # delete (local info on) remote refs which don't have local equivalents
+    cry="! f() { git \"cry$(git config get --default=2 x-user.cry)\" \"$@\"; }; f" # update copyright year
+    cry1="! f() { git x-cry-amcr \"$@\" |git x-cry-ibm-norm |git x-cry-yy |( while read FF; do read YY; git x-sedi1 -E '1,20{s#(Copyright [(][Cc][)] )[0-9]{4}(,[0-9]{4})?( IBM)#\\1'\"$YY\"'\\3#};' \"$FF\"; done; );}; f" # update single (LAST) copyright year
+    cry2="! f() { git x-cry-amcr \"$@\" |git x-cry-ibm-norm |git x-cry-yy |( while read FF; do read YY; git x-sedi1 -E '1,20{s#(Copyright [(][Cc][)] [0-9]{4})(,[0-9]{4})?( IBM)#\\1, '\"$YY\"'\\3#;s#(Copyright [(][Cc][)] )'\"$YY\"', ('\"$YY\"' IBM)#\\1\\2#;};' \"$FF\"; done; );}; f" # update FIRST, LAST copyright year
+    x-cry-yy="! f() { git x-cry-yy-filter |while read FF; do echo \"$FF\"; if git diff --quiet -I'Copyright [(][Cc][)] [0-9]{4} IBM' HEAD -- \"$FF\"; then YY=\"$(git log -1 --pretty=format:%cd --date=format:%Y -- \"$FF\")\"; else unset -v YY; fi; echo \"${YY:-\"$(date +%Y)\"}\"; done; }; f"
+    x-cry-yy-filter="! f() { while read FF; do if [ \"$(sed -En '1,20{/Copyright [(][Cc][)] [0-9]{4}(,[0-9]{4})? IBM/p;};' \"$FF\")\" ]; then echo \"$FF\"; else echo \"WARNING: missing IBM copyright in '$FF'\" >&2; fi; done; }; f"
+    x-cry-amcr="! f() ( export BB=\"${1:-\"$(git bb)\"}\"; { git x-cry-am; git x-cry-cr; } |sort |sed -E 's#^#'\"$(git root)\"'/#'; ); f"
+    x-cry-am="! f() { git dno --no-relative --find-copies-harder --diff-filter=AM \"$BB\"; }; f"
+    x-cry-cr="! f() { git dns --no-relative --find-copies-harder --diff-filter=CR -z \"$BB\" |tr '\\0' '\\n' |git x-cry-cr-filter1; }; f"
+    x-cry-cr-filter1="! f() { while read CC; do read OO; read NN; if [ \"${CC#?}\" = \"100\" ]; then continue; else git x-cry-cr-filter2 \"$BB:$OO\" \"$NN\"; fi; done; }; f"
+    x-cry-cr-filter2="! f() { git diff --ignore-all-space --quiet \"$1\" \"$2\" 2>/dev/null || echo \"$2\"; }; f"
+    x-cry-ibm-norm= "! f() (while read FF; do git x-sedi1 -E '1,20{/[Cc]opyright.*(IBM|International +Business +Machines)/{s#International +Business +Machines#IBM#;s#IBM +Corp[.]?( |$)#IBM Corporation\\1#;s#[Cc]opyright +#Copyright (c) #;s#Copyright [(][Cc][)] [(][Cc][)] #Copyright (c) #;s#(Copyright [(][Cc][)] )(IBM Corporation( [^0-9]+)?) ([0-9]{4}( ?[,. -] ?[0-9]{4})?)\\b#\\1\\4 \\2#;s#(Copyright [(][Cc][)] [0-9]{4}) ?[,. -] ?([0-9]{4} IBM)#\\1, \\2#;s#(IBM Corporation ) *#\\1#;s# +$##;};};' \"$FF\"; echo \"$FF\"; done; ); f" # Normalize IBM copyright statement
+    x-sedi1="! f() { for OO in \"$@\"; do :; done; TT=\"$(mktemp)\"; sed \"$@\" > \"$TT\"; cat \"$TT\" > \"$OO\"; rm \"$TT\"; }; f" # POSIX compliant in-place sed for a single file
+[diff]
+    tool = meld
+    renameLimit = 999999
+[merge]
+    tool = meld
+    conflictstyle = diff3
+[core]
+    autocrlf = input
+    editor = vim
+[push]
+    default = simple
+[pretty]
+    aol="tformat:%C(auto)%h %C(blue)[%aN]%C(auto)%d %s"
+    adol="tformat:%C(auto)%h %C(magenta)%as %C(blue)%aN%C(auto)%d %C(reset)%s"
+    cdol="tformat:%C(auto)%h %C(magenta)%cs %C(blue)%cN%C(auto)%d %C(reset)%s"
+[remote]
+    pushdefault = my-fork
+[init]
+    defaultBranch = main
+[pull]
+    ff = only
